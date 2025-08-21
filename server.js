@@ -1,0 +1,92 @@
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import bodyParser from "body-parser";
+import connectDB from "./config/db.js";
+import path from "path";
+import { fileURLToPath } from "url";
+import userRoutes from "./routes/userRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
+import productRoutes from "./routes/productRoutes.js";
+
+import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
+import fs from "fs";
+
+dotenv.config();
+connectDB();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+
+// CORS
+app.use(
+  cors({
+    origin: process.env.CLIENT_ORIGIN?.split(",") || "*",
+  })
+);
+
+// Parsers
+app.use(bodyParser.json());
+app.use(express.urlencoded({ extended: true }));
+
+// ------------------ Product Images (Local) ------------------
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// ------------------ Cloudinary Config (for payment screenshots) ------------------
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Multer setup (temporary storage)
+const upload = multer({
+  dest: "uploads/",
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const ok = ["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(file.mimetype);
+    cb(ok ? null : new Error("Only images allowed"), ok);
+  },
+});
+
+// Health check
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true, ts: Date.now() });
+});
+
+// ------------------ Upload Route (for Checkout Payment Screenshot) ------------------
+app.post("/api/upload", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      folder: "orders/screenshots",
+      resource_type: "image",
+    });
+
+    // remove temp file
+    fs.unlink(req.file.path, () => {});
+
+    return res.json({
+      url: result.secure_url,
+      public_id: result.public_id,
+    });
+  } catch (err) {
+    console.error("Upload error:", err);
+    return res.status(500).json({ error: "Upload failed" });
+  }
+});
+
+// ------------------ Routes ------------------
+app.use("/api/users", userRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/admin", adminRoutes);
+
+// ------------------ Start Server ------------------
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () =>
+  console.log(`🚀 Server running on http://localhost:${PORT}`)
+);
