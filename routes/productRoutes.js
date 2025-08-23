@@ -1,6 +1,7 @@
 // backend/routes/productRoutes.js
 import express from "express";
 import Product from "../models/Product.js";
+import moment from "moment-timezone";
 
 const router = express.Router();
 
@@ -26,19 +27,24 @@ router.get("/", async (req, res) => {
 
     const categories = await Product.distinct("category");
 
-    const now = new Date();
+    // ✅ Get "now" in Pakistan timezone
+    const now = moment().tz("Asia/Karachi");
 
     res.json({
       products: products.map((p) => {
-        // discount calculation
         let discountActive = false;
         let discountExpiry = null;
 
         if (p.discountPercentage > 0 && p.discountEnd) {
-          discountExpiry = new Date(p.discountEnd);
-          discountActive =
-            discountExpiry >= now &&
-            new Date(p.discountStart) <= now;
+          // ✅ Convert DB dates to Pakistan timezone
+          const discountStart = moment(p.discountStart).tz("Asia/Karachi");
+          const discountEnd = moment(p.discountEnd).tz("Asia/Karachi");
+
+          // ✅ Send as ISO string (safe for frontend)
+          discountExpiry = discountEnd.toISOString();
+
+          // ✅ Check if active
+          discountActive = now.isBetween(discountStart, discountEnd, null, "[]");
         }
 
         return {
@@ -47,7 +53,7 @@ router.get("/", async (req, res) => {
             ? `${req.protocol}://${req.get("host")}${p.imageUrl}`
             : "",
           discount: p.discountPercentage || 0,
-          discountExpiry,
+          discountExpiry, // ✅ ISO string
           isDiscountActive: discountActive,
         };
       }),
@@ -59,6 +65,5 @@ router.get("/", async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 });
-
 
 export default router;
