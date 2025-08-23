@@ -22,10 +22,20 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // CORS
+const allowedOrigins = [
+  "http://localhost:5173", 
+  "https://the-gift-oasis-frontend.vercel.app"
+];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN.split(","),
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
