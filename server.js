@@ -24,7 +24,9 @@ const app = express();
 // CORS
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN?.split(",") || "*",
+    origin: process.env.CLIENT_ORIGIN.split(","),
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    credentials: true,
   })
 );
 
