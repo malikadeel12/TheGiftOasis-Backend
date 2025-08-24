@@ -3,8 +3,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
 import connectDB from "./config/db.js";
-import path from "path";
 import { fileURLToPath } from "url";
+import path from "path";
 import userRoutes from "./routes/userRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
@@ -21,10 +21,10 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// CORS
+// ------------------ CORS ------------------
 const allowedOrigins = [
-  "http://localhost:5173", 
-  "https://the-gift-oasis-frontend.vercel.app"
+  "http://localhost:5173",
+  "https://the-gift-oasis-frontend.vercel.app",
 ];
 
 app.use(
@@ -40,36 +40,35 @@ app.use(
   })
 );
 
-// Parsers
+// ------------------ Parsers ------------------
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ------------------ Product Images (Local) ------------------
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-// ------------------ Cloudinary Config (for payment screenshots) ------------------
+// ------------------ Cloudinary Config ------------------
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Multer setup (temporary storage)
+// ------------------ Multer (temp storage) ------------------
 const upload = multer({
   dest: "uploads/",
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (req, file, cb) => {
-    const ok = ["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(file.mimetype);
+    const ok = ["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(
+      file.mimetype
+    );
     cb(ok ? null : new Error("Only images allowed"), ok);
   },
 });
 
-// Health check
+// ------------------ Health check ------------------
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, ts: Date.now() });
 });
 
-// ------------------ Upload Route (for Checkout Payment Screenshot) ------------------
+// ------------------ Upload Route (Checkout Payment Screenshot) ------------------
 app.post("/api/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -79,8 +78,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
       resource_type: "image",
     });
 
-    // remove temp file
-    fs.unlink(req.file.path, () => {});
+    fs.unlink(req.file.path, () => {}); // delete temp file
 
     return res.json({
       url: result.secure_url,
