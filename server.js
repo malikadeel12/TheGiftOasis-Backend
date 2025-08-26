@@ -24,6 +24,7 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   "https://the-gift-oasis-frontend.vercel.app",
+  "https://the-gift-oasis-frontend-o8py.vercel.app" 
 ];
 
 app.use(
