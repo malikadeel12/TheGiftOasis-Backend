@@ -1,10 +1,31 @@
-// backend/routes/productRoutes.js
 import express from "express";
 import Product from "../models/Product.js";
 import moment from "moment-timezone";
 
 const router = express.Router();
 
+// ===== Helper: Discount Logic =====
+function getDiscountInfo(product) {
+  const now = moment().tz("Asia/Karachi");
+  let discountActive = false;
+  let discountExpiry = null;
+
+  if (product.discountPercentage > 0 && product.discountStart && product.discountEnd) {
+    const discountStart = moment(product.discountStart).tz("Asia/Karachi");
+    const discountEnd = moment(product.discountEnd).tz("Asia/Karachi");
+
+    discountExpiry = discountEnd.toISOString();
+    discountActive = now.isBetween(discountStart, discountEnd, null, "[]");
+  }
+
+  return {
+    discountActive,
+    discountExpiry,
+    finalPrice: discountActive ? product.getFinalPrice() : product.price,
+  };
+}
+
+// ===== Get All Products (User view) =====
 router.get("/", async (req, res) => {
   try {
     const { search = "", category = "", page = 1, limit = 8 } = req.query;
@@ -16,44 +37,28 @@ router.get("/", async (req, res) => {
         { description: { $regex: search, $options: "i" } },
       ];
     }
-    if (category) {
-      filter.category = category;
-    }
+    if (category) filter.category = category;
 
     const total = await Product.countDocuments(filter);
     const products = await Product.find(filter)
       .skip((page - 1) * limit)
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .sort({ createdAt: -1 }); // latest first
 
     const categories = await Product.distinct("category");
 
-    // ✅ Get "now" in Pakistan timezone
-    const now = moment().tz("Asia/Karachi");
-
     res.json({
       products: products.map((p) => {
-        let discountActive = false;
-        let discountExpiry = null;
-
-        if (p.discountPercentage > 0 && p.discountEnd) {
-          // ✅ Convert DB dates to Pakistan timezone
-          const discountStart = moment(p.discountStart).tz("Asia/Karachi");
-          const discountEnd = moment(p.discountEnd).tz("Asia/Karachi");
-
-          // ✅ Send as ISO string (safe for frontend)
-          discountExpiry = discountEnd.toISOString();
-
-          // ✅ Check if active
-          discountActive = now.isBetween(discountStart, discountEnd, null, "[]");
-        }
+        const { discountActive, discountExpiry, finalPrice } = getDiscountInfo(p);
 
         return {
           ...p._doc,
-          imageUrl: p.imageUrl
-            ? `${req.protocol}://${req.get("host")}${p.imageUrl}`
-            : "",
-          discount: p.discountPercentage || 0,
-          discountExpiry, // ✅ ISO string
+          imageUrl: p.imageUrl,
+          discountPercentage: discountActive ? p.discountPercentage : 0,
+          discountStart: discountActive ? p.discountStart : null,
+          discountEnd: discountActive ? p.discountEnd : null,
+          finalPrice,
+          discountExpiry,
           isDiscountActive: discountActive,
         };
       }),
@@ -61,8 +66,32 @@ router.get("/", async (req, res) => {
       categories,
     });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Fetch products error:", err);
     res.status(500).json({ message: "Server Error" });
+  }
+});
+
+// ===== Get Single Product (User view) =====
+router.get("/:id", async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    const { discountActive, discountExpiry, finalPrice } = getDiscountInfo(product);
+
+    res.json({
+      ...product._doc,
+      imageUrl: product.imageUrl,
+      discountPercentage: discountActive ? product.discountPercentage : 0,
+      discountStart: discountActive ? product.discountStart : null,
+      discountEnd: discountActive ? product.discountEnd : null,
+      finalPrice,
+      discountExpiry,
+      isDiscountActive: discountActive,
+    });
+  } catch (err) {
+    console.error("❌ Single product fetch error:", err);
+    res.status(500).json({ message: "Error fetching product" });
   }
 });
 

@@ -8,10 +8,9 @@ import path from "path";
 import userRoutes from "./routes/userRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
-
 import multer from "multer";
-import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
+import { v2 as cloudinary } from "cloudinary";
 
 dotenv.config();
 connectDB();
@@ -44,7 +43,7 @@ app.use(
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ------------------ Cloudinary Config ------------------
+// ------------------ Cloudinary Config (for checkout screenshots only) ------------------
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -54,11 +53,9 @@ cloudinary.config({
 // ------------------ Multer (temp storage) ------------------
 const upload = multer({
   dest: "uploads/",
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const ok = ["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(
-      file.mimetype
-    );
+    const ok = ["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(file.mimetype);
     cb(ok ? null : new Error("Only images allowed"), ok);
   },
 });
@@ -68,7 +65,7 @@ app.get("/api/health", (req, res) => {
   res.json({ ok: true, ts: Date.now() });
 });
 
-// ------------------ Upload Route (Checkout Payment Screenshot) ------------------
+// ------------------ Checkout Screenshot Upload (Cloudinary) ------------------
 app.post("/api/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -92,8 +89,8 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 
 // ------------------ Routes ------------------
 app.use("/api/users", userRoutes);
-app.use("/api/products", productRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/product", productRoutes);
 
 // ------------------ Start Server ------------------
 const PORT = process.env.PORT || 5000;
