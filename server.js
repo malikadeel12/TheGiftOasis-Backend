@@ -7,7 +7,6 @@ import { fileURLToPath } from "url";
 import path from "path";
 import userRoutes from "./routes/userRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
-import productRoutes from "./routes/productRoutes.js";
 import multer from "multer";
 import fs from "fs";
 import { v2 as cloudinary } from "cloudinary";
@@ -91,7 +90,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 // ------------------ Routes ------------------
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/product", productRoutes);
+
 
 // ------------------ Start Server ------------------
 const PORT = process.env.PORT;

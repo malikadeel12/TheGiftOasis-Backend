@@ -3,7 +3,7 @@ import multer from "multer";
 import Product from "../models/Product.js";
 import { verifyToken, isAdmin } from "../middleware/auth.js";
 import moment from "moment-timezone";
-import { uploadToImgBB } from "../utils/uploadImgBB.js";
+import { uploadToCloudinary } from "../utils/uploadCloudinary.js";
 
 const router = express.Router();
 
@@ -27,14 +27,15 @@ function getDiscountInfo(product) {
     const discountStart = moment(product.discountStart).tz("Asia/Karachi");
     const discountEnd = moment(product.discountEnd).tz("Asia/Karachi");
 
-    discountExpiry = discountEnd.toISOString();
     discountActive = now.isBetween(discountStart, discountEnd, null, "[]");
+    discountExpiry = discountEnd.format("YYYY-MM-DDTHH:mm"); // frontend-friendly
   }
 
   return {
     discountActive,
     discountExpiry,
     finalPrice: discountActive ? product.getFinalPrice() : product.price,
+    discountPercentage: product.discountPercentage || 0,
   };
 }
 
@@ -44,12 +45,12 @@ router.get("/dashboard", verifyToken, isAdmin, async (req, res) => {
     const products = await Product.find().sort({ createdAt: -1 });
 
     const updatedProducts = products.map((p) => {
-      const { discountActive, discountExpiry, finalPrice } = getDiscountInfo(p);
+      const { discountActive, discountExpiry, finalPrice, discountPercentage } = getDiscountInfo(p);
 
       return {
         ...p._doc,
         imageUrl: p.imageUrl,
-        discountPercentage: discountActive ? p.discountPercentage : 0,
+        discountPercentage: discountActive ? discountPercentage : 0,
         discountStart: discountActive ? p.discountStart : null,
         discountEnd: discountActive ? p.discountEnd : null,
         finalPrice,
@@ -69,26 +70,42 @@ router.get("/dashboard", verifyToken, isAdmin, async (req, res) => {
 router.post("/add-product", verifyToken, isAdmin, upload.single("image"), async (req, res) => {
   try {
     const { name, description, price, category, discountPercentage, discountStart, discountEnd } = req.body;
-    let imageUrl = "";
 
-    if (req.file) imageUrl = await uploadToImgBB(req.file.path);
+    if (!name || !description || !price || !category) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const priceNum = Number(price);
+    if (Number.isNaN(priceNum) || priceNum < 0) return res.status(400).json({ message: "Invalid price" });
+
+    let imageUrl = "";
+    if (req.file) {
+      imageUrl = await uploadToCloudinary(req.file.path);
+    }
+
+    const discountStartDate = discountStart
+      ? moment.tz(discountStart, "Asia/Karachi").toISOString()
+      : null;
+    const discountEndDate = discountEnd
+      ? moment.tz(discountEnd, "Asia/Karachi").toISOString()
+      : null;
 
     const product = new Product({
       name,
       description,
-      price,
+      price: priceNum,
       category,
-      discountPercentage: discountPercentage || 0,
-      discountStart: discountStart || null,
-      discountEnd: discountEnd || null,
+      discountPercentage: Number(discountPercentage || 0),
+      discountStart: discountStartDate,
+      discountEnd: discountEndDate,
       imageUrl,
     });
 
     await product.save();
-    res.json({ message: "Product added successfully", product });
+    res.json({ message: "✅ Product added successfully", product });
   } catch (err) {
     console.error("❌ Add product error:", err);
-    res.status(500).json({ message: "Error adding product" });
+    res.status(500).json({ message: "Error adding product", error: err.message });
   }
 });
 
@@ -102,12 +119,16 @@ router.put("/update-product/:id", verifyToken, isAdmin, upload.single("image"), 
       description,
       price,
       category,
-      discountPercentage: discountPercentage || 0,
-      discountStart: discountStart || null,
-      discountEnd: discountEnd || null,
+      discountPercentage: Number(discountPercentage || 0),
+      discountStart: discountStart
+        ? moment.tz(discountStart, "Asia/Karachi").toISOString()
+        : null,
+      discountEnd: discountEnd
+        ? moment.tz(discountEnd, "Asia/Karachi").toISOString()
+        : null,
     };
 
-    if (req.file) updateData.imageUrl = await uploadToImgBB(req.file.path);
+    if (req.file) updateData.imageUrl = await uploadToCloudinary(req.file.path);
 
     const updatedProduct = await Product.findByIdAndUpdate(req.params.id, updateData, { new: true });
     res.json({ message: "Product updated successfully", updatedProduct });
@@ -125,6 +146,77 @@ router.delete("/delete-product/:id", verifyToken, isAdmin, async (req, res) => {
   } catch (err) {
     console.error("❌ Delete product error:", err);
     res.status(500).json({ message: "Error deleting product" });
+  }
+});
+
+// ===== User: Get All Products =====
+router.get("/", async (req, res) => {
+  try {
+    const { search = "", category = "", page = 1, limit = 8 } = req.query;
+    const filter = {};
+
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+      ];
+    }
+    if (category) filter.category = category;
+
+    const total = await Product.countDocuments(filter);
+    const products = await Product.find(filter)
+      .skip((page - 1) * limit)
+      .limit(Number(limit))
+      .sort({ createdAt: -1 });
+
+    const categories = await Product.distinct("category");
+
+    const updatedProducts = products.map((p) => {
+      const { discountActive, discountExpiry, finalPrice, discountPercentage } = getDiscountInfo(p);
+      return {
+        ...p._doc,
+        imageUrl: p.imageUrl,
+        discountPercentage: discountActive ? discountPercentage : 0,
+        discountStart: discountActive ? p.discountStart : null,
+        discountEnd: discountActive ? p.discountEnd : null,
+        finalPrice,
+        discountExpiry,
+        isDiscountActive: discountActive,
+      };
+    });
+
+    res.json({
+      products: updatedProducts,
+      totalPages: Math.ceil(total / limit),
+      categories,
+    });
+  } catch (err) {
+    console.error("❌ Fetch products error:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
+
+// ===== User: Get Single Product =====
+router.get("/:id", async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    const { discountActive, discountExpiry, finalPrice, discountPercentage } = getDiscountInfo(product);
+
+    res.json({
+      ...product._doc,
+      imageUrl: product.imageUrl,
+      discountPercentage: discountActive ? discountPercentage : 0,
+      discountStart: discountActive ? product.discountStart : null,
+      discountEnd: discountActive ? product.discountEnd : null,
+      finalPrice,
+      discountExpiry,
+      isDiscountActive: discountActive,
+    });
+  } catch (err) {
+    console.error("❌ Single product fetch error:", err);
+    res.status(500).json({ message: "Error fetching product" });
   }
 });
 
