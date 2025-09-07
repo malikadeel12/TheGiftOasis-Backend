@@ -40,7 +40,8 @@ function getDiscountInfo(product) {
     const discountEnd = moment(product.discountEnd).tz("Asia/Karachi");
 
     discountActive = now.isBetween(discountStart, discountEnd, null, "[]");
-    discountExpiry = discountEnd.format("YYYY-MM-DDTHH:mm"); // frontend-friendly
+    // Send ISO so frontend can localize precisely without double converting
+    discountExpiry = discountEnd.toISOString();
   }
 
   return {
