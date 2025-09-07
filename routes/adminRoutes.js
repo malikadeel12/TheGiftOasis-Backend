@@ -10,10 +10,22 @@ const router = express.Router();
 // ===== Multer Config =====
 const upload = multer({
   dest: "uploads/",
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 50 * 1024 * 1024 }, // allow videos up to 50MB
   fileFilter: (req, file, cb) => {
-    const ok = ["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(file.mimetype);
-    cb(ok ? null : new Error("Only images allowed"), ok);
+    const allowed = [
+      // images
+      "image/png",
+      "image/jpeg",
+      "image/jpg",
+      "image/webp",
+      // videos
+      "video/mp4",
+      "video/webm",
+      "video/ogg",
+      "video/quicktime",
+    ];
+    const ok = allowed.includes(file.mimetype);
+    cb(ok ? null : new Error("Only images or videos allowed"), ok);
   },
 });
 
@@ -67,7 +79,10 @@ router.get("/dashboard", verifyToken, isAdmin, async (req, res) => {
 });
 
 // ===== Add Product =====
-router.post("/add-product", verifyToken, isAdmin, upload.single("image"), async (req, res) => {
+router.post("/add-product", verifyToken, isAdmin, upload.fields([
+  { name: "image", maxCount: 1 },
+  { name: "video", maxCount: 1 },
+]), async (req, res) => {
   try {
     const { name, description, price, category, discountPercentage, discountStart, discountEnd } = req.body;
 
@@ -79,8 +94,14 @@ router.post("/add-product", verifyToken, isAdmin, upload.single("image"), async 
     if (Number.isNaN(priceNum) || priceNum < 0) return res.status(400).json({ message: "Invalid price" });
 
     let imageUrl = "";
-    if (req.file) {
-      imageUrl = await uploadToCloudinary(req.file.path);
+    let videoUrl = "";
+    const imageFile = req.files?.image?.[0];
+    const videoFile = req.files?.video?.[0];
+    if (imageFile) {
+      imageUrl = await uploadToCloudinary(imageFile.path, "products/images");
+    }
+    if (videoFile) {
+      videoUrl = await uploadToCloudinary(videoFile.path, "products/videos", { resource_type: "auto" });
     }
 
     const discountStartDate = discountStart
@@ -99,6 +120,7 @@ router.post("/add-product", verifyToken, isAdmin, upload.single("image"), async 
       discountStart: discountStartDate,
       discountEnd: discountEndDate,
       imageUrl,
+      videoUrl,
     });
 
     await product.save();
@@ -110,7 +132,10 @@ router.post("/add-product", verifyToken, isAdmin, upload.single("image"), async 
 });
 
 // ===== Update Product =====
-router.put("/update-product/:id", verifyToken, isAdmin, upload.single("image"), async (req, res) => {
+router.put("/update-product/:id", verifyToken, isAdmin, upload.fields([
+  { name: "image", maxCount: 1 },
+  { name: "video", maxCount: 1 },
+]), async (req, res) => {
   try {
     const { name, description, price, category, discountPercentage, discountStart, discountEnd } = req.body;
 
@@ -128,7 +153,10 @@ router.put("/update-product/:id", verifyToken, isAdmin, upload.single("image"), 
         : null,
     };
 
-    if (req.file) updateData.imageUrl = await uploadToCloudinary(req.file.path);
+    const imageFile = req.files?.image?.[0];
+    const videoFile = req.files?.video?.[0];
+    if (imageFile) updateData.imageUrl = await uploadToCloudinary(imageFile.path, "products/images");
+    if (videoFile) updateData.videoUrl = await uploadToCloudinary(videoFile.path, "products/videos", { resource_type: "auto" });
 
     const updatedProduct = await Product.findByIdAndUpdate(req.params.id, updateData, { new: true });
     res.json({ message: "Product updated successfully", updatedProduct });

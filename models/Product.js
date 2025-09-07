@@ -5,7 +5,8 @@ const productSchema = new mongoose.Schema({
   description: String,
   price: { type: Number, required: true },
   category: { type: String },
-  imageUrl: String, // For storing uploaded image path
+  imageUrl: String, // For storing uploaded image URL
+  videoUrl: String, // For storing uploaded video URL
   discountPercentage: { type: Number, default: 0 }, // percentage discount
   discountStart: { type: Date, default: null },
   discountEnd: { type: Date, default: null }

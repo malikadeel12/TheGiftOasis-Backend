@@ -9,13 +9,14 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-export async function uploadToCloudinary(filePath, folder = "gift-shop") {
+export async function uploadToCloudinary(filePath, folder = "gift-shop", options = {}) {
   if (!process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET || !process.env.CLOUDINARY_CLOUD_NAME) {
     throw new Error("Cloudinary environment variables missing");
   }
 
   try {
-    const result = await cloudinary.uploader.upload(filePath, { folder });
+    // Use resource_type: 'auto' so both images and videos are supported
+    const result = await cloudinary.uploader.upload(filePath, { resource_type: "auto", folder, ...options });
     return result.secure_url;
   } catch (err) {
     throw new Error("Cloudinary upload failed: " + err.message);
