@@ -7,12 +7,12 @@ import { fileURLToPath } from "url";
 import path from "path";
 import userRoutes from "./routes/userRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import orderRoutes from "./routes/orderRoutes.js";
+import blogRoutes from "./routes/blogRoutes.js";
 import multer from "multer";
 import fs from "fs";
 import { v2 as cloudinary } from "cloudinary";
-
 dotenv.config();
-connectDB();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +22,7 @@ const app = express();
 // ------------------ CORS ------------------
 const allowedOrigins = [
   "http://localhost:5173",
+  "http://localhost:5174",
   "https://the-gift-oasis-frontend.vercel.app",
   "https://the-gift-oasis-frontend-o8py.vercel.app" ,
   "https://thegiftoasis.store",
@@ -94,10 +95,23 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 // ------------------ Routes ------------------
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/blog", blogRoutes);
 
 
 // ------------------ Start Server ------------------
-const PORT = process.env.PORT;
-app.listen(PORT, () =>
-  console.log(`🚀 Server running on http://localhost:${PORT}`)
-);
+const PORT = process.env.PORT || 5000;
+
+const startServer = async () => {
+  try {
+    await connectDB();
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
+    });
+  } catch (err) {
+    console.error("❌ Failed to start server:", err);
+    process.exit(1);
+  }
+};
+
+startServer();

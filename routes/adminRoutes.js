@@ -1,6 +1,9 @@
 import express from "express";
 import multer from "multer";
+import mongoose from "mongoose";
 import Product from "../models/Product.js";
+import Review from "../models/Review.js";
+import Order from "../models/Order.js";
 import { verifyToken, isAdmin } from "../middleware/auth.js";
 import moment from "moment-timezone";
 import { uploadToCloudinary } from "../utils/uploadCloudinary.js";
@@ -52,25 +55,71 @@ function getDiscountInfo(product) {
   };
 }
 
+function parseBundleItems(input) {
+  if (!input) return [];
+  if (Array.isArray(input)) {
+    return input.filter((item) => typeof item === "string" && item.trim().length > 0);
+  }
+  if (typeof input === "string") {
+    try {
+      const parsed = JSON.parse(input);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item) => typeof item === "string" && item.trim().length > 0);
+      }
+    } catch {
+      // fall through to comma splitting
+    }
+    return input
+      .replace(/\n/g, ",")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function decorateProduct(product) {
+  const { discountActive, discountExpiry, finalPrice, discountPercentage } = getDiscountInfo(product);
+
+  return {
+    ...product._doc,
+    imageUrl: product.imageUrl,
+    discountPercentage: discountActive ? discountPercentage : 0,
+    discountStart: discountActive ? product.discountStart : null,
+    discountEnd: discountActive ? product.discountEnd : null,
+    finalPrice,
+    discountExpiry,
+    isDiscountActive: discountActive,
+    averageRating: Number(product.averageRating || 0),
+    ratingCount: product.ratingCount || 0,
+  };
+}
+
+async function recalculateProductRating(productId) {
+  const result = await Review.aggregate([
+    { $match: { product: new mongoose.Types.ObjectId(productId) } },
+    {
+      $group: {
+        _id: "$product",
+        averageRating: { $avg: "$rating" },
+        ratingCount: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const stats = result[0];
+  await Product.findByIdAndUpdate(productId, {
+    averageRating: stats?.averageRating || 0,
+    ratingCount: stats?.ratingCount || 0,
+  });
+}
+
 // ===== Admin Dashboard (All Products) =====
 router.get("/dashboard", verifyToken, isAdmin, async (req, res) => {
   try {
     const products = await Product.find().sort({ createdAt: -1 });
 
-    const updatedProducts = products.map((p) => {
-      const { discountActive, discountExpiry, finalPrice, discountPercentage } = getDiscountInfo(p);
-
-      return {
-        ...p._doc,
-        imageUrl: p.imageUrl,
-        discountPercentage: discountActive ? discountPercentage : 0,
-        discountStart: discountActive ? p.discountStart : null,
-        discountEnd: discountActive ? p.discountEnd : null,
-        finalPrice,
-        discountExpiry,
-        isDiscountActive: discountActive,
-      };
-    });
+    const updatedProducts = products.map((p) => decorateProduct(p));
 
     res.json({ products: updatedProducts });
   } catch (err) {
@@ -85,7 +134,21 @@ router.post("/add-product", verifyToken, isAdmin, upload.fields([
   { name: "video", maxCount: 1 },
 ]), async (req, res) => {
   try {
-    const { name, description, price, category, discountPercentage, discountStart, discountEnd } = req.body;
+    const {
+      name,
+      description,
+      price,
+      category,
+      discountPercentage,
+      discountStart,
+      discountEnd,
+      isFeatured,
+      promotionBadge,
+      promoCode,
+      promoDescription,
+      promoExpiresAt,
+      bundleItems,
+    } = req.body;
 
     if (!name || !description || !price || !category) {
       return res.status(400).json({ message: "Missing required fields" });
@@ -122,6 +185,14 @@ router.post("/add-product", verifyToken, isAdmin, upload.fields([
       discountEnd: discountEndDate,
       imageUrl,
       videoUrl,
+      isFeatured: Boolean(isFeatured === "true" || isFeatured === true),
+      promotionBadge: promotionBadge || "",
+      promoCode: promoCode || "",
+      promoDescription: promoDescription || "",
+      promoExpiresAt: promoExpiresAt
+        ? moment.tz(promoExpiresAt, "Asia/Karachi").toISOString()
+        : null,
+      bundleItems: parseBundleItems(bundleItems),
     });
 
     await product.save();
@@ -138,7 +209,21 @@ router.put("/update-product/:id", verifyToken, isAdmin, upload.fields([
   { name: "video", maxCount: 1 },
 ]), async (req, res) => {
   try {
-    const { name, description, price, category, discountPercentage, discountStart, discountEnd } = req.body;
+    const {
+      name,
+      description,
+      price,
+      category,
+      discountPercentage,
+      discountStart,
+      discountEnd,
+      isFeatured,
+      promotionBadge,
+      promoCode,
+      promoDescription,
+      promoExpiresAt,
+      bundleItems,
+    } = req.body;
 
     const updateData = {
       name,
@@ -152,6 +237,14 @@ router.put("/update-product/:id", verifyToken, isAdmin, upload.fields([
       discountEnd: discountEnd
         ? moment.tz(discountEnd, "Asia/Karachi").toISOString()
         : null,
+      isFeatured: Boolean(isFeatured === "true" || isFeatured === true),
+      promotionBadge: promotionBadge || "",
+      promoCode: promoCode || "",
+      promoDescription: promoDescription || "",
+      promoExpiresAt: promoExpiresAt
+        ? moment.tz(promoExpiresAt, "Asia/Karachi").toISOString()
+        : null,
+      bundleItems: parseBundleItems(bundleItems),
     };
 
     const imageFile = req.files?.image?.[0];
@@ -200,19 +293,7 @@ router.get("/", async (req, res) => {
 
     const categories = await Product.distinct("category");
 
-    const updatedProducts = products.map((p) => {
-      const { discountActive, discountExpiry, finalPrice, discountPercentage } = getDiscountInfo(p);
-      return {
-        ...p._doc,
-        imageUrl: p.imageUrl,
-        discountPercentage: discountActive ? discountPercentage : 0,
-        discountStart: discountActive ? p.discountStart : null,
-        discountEnd: discountActive ? p.discountEnd : null,
-        finalPrice,
-        discountExpiry,
-        isDiscountActive: discountActive,
-      };
-    });
+    const updatedProducts = products.map((p) => decorateProduct(p));
 
     res.json({
       products: updatedProducts,
@@ -226,26 +307,155 @@ router.get("/", async (req, res) => {
 });
 
 // ===== User: Get Single Product =====
+router.get("/highlights", async (req, res) => {
+  try {
+    const [featured, bundles, newArrivals] = await Promise.all([
+      Product.find({ isFeatured: true }).sort({ updatedAt: -1 }).limit(8),
+      Product.find({
+        $or: [
+          { bundleItems: { $exists: true, $ne: [] } },
+          { promotionBadge: { $regex: /bundle|deal|offer/i } },
+          { promoCode: { $ne: "" } },
+        ],
+      })
+        .sort({ updatedAt: -1 })
+        .limit(8),
+      Product.find().sort({ createdAt: -1 }).limit(8),
+    ]);
+
+    const bestSellerAggregation = await Order.aggregate([
+      { $unwind: "$items" },
+      { $match: { "items.productId": { $ne: null } } },
+      {
+        $group: {
+          _id: "$items.productId",
+          totalSold: { $sum: "$items.quantity" },
+        },
+      },
+      { $sort: { totalSold: -1 } },
+      { $limit: 8 },
+    ]);
+
+    const bestSellerIds = bestSellerAggregation.map((doc) => doc._id);
+    const bestSellerProducts = await Product.find({ _id: { $in: bestSellerIds } });
+    const bestSellers = bestSellerProducts
+      .map((product) => {
+        const stats = bestSellerAggregation.find((doc) => doc._id.toString() === product._id.toString());
+        return {
+          ...decorateProduct(product),
+          totalSold: stats?.totalSold || 0,
+        };
+      })
+      .sort((a, b) => (b.totalSold || 0) - (a.totalSold || 0));
+
+    res.json({
+      featured: featured.map(decorateProduct),
+      bundles: bundles.map(decorateProduct),
+      newArrivals: newArrivals.map(decorateProduct),
+      bestSellers,
+    });
+  } catch (err) {
+    console.error("❌ Highlights fetch error:", err);
+    res.status(500).json({ message: "Error fetching highlights" });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    const { discountActive, discountExpiry, finalPrice, discountPercentage } = getDiscountInfo(product);
+    const decorated = decorateProduct(product);
 
-    res.json({
-      ...product._doc,
-      imageUrl: product.imageUrl,
-      discountPercentage: discountActive ? discountPercentage : 0,
-      discountStart: discountActive ? product.discountStart : null,
-      discountEnd: discountActive ? product.discountEnd : null,
-      finalPrice,
-      discountExpiry,
-      isDiscountActive: discountActive,
-    });
+    res.json(decorated);
   } catch (err) {
     console.error("❌ Single product fetch error:", err);
     res.status(500).json({ message: "Error fetching product" });
+  }
+});
+
+// ===== Reviews =====
+router.get("/:id/reviews", async (req, res) => {
+  try {
+    const reviews = await Review.find({ product: req.params.id })
+      .sort({ createdAt: -1 })
+      .populate("user", "firstName lastName email");
+
+    res.json({
+      reviews,
+    });
+  } catch (err) {
+    console.error("❌ Fetch reviews error:", err);
+    res.status(500).json({ message: "Error fetching reviews" });
+  }
+});
+
+router.post("/:id/reviews", verifyToken, async (req, res) => {
+  try {
+    const { rating, title, comment } = req.body;
+    if (!rating) {
+      return res.status(400).json({ message: "Rating is required" });
+    }
+
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    const payload = {
+      product: req.params.id,
+      user: req.user.id,
+      rating: Number(rating),
+      title: title || "",
+      comment: comment || "",
+    };
+
+    let review = await Review.findOne({ product: req.params.id, user: req.user.id });
+    if (review) {
+      review.rating = payload.rating;
+      review.title = payload.title;
+      review.comment = payload.comment;
+      await review.save();
+    } else {
+      review = await Review.create(payload);
+    }
+
+    await recalculateProductRating(req.params.id);
+
+    const populated = await review.populate("user", "firstName lastName email");
+
+    res.status(201).json({
+      message: "Review saved successfully",
+      review: populated,
+    });
+  } catch (err) {
+    console.error("❌ Save review error:", err);
+    res.status(500).json({ message: "Error saving review" });
+  }
+});
+
+router.delete("/:id/reviews/:reviewId", verifyToken, async (req, res) => {
+  try {
+    const review = await Review.findOne({
+      _id: req.params.reviewId,
+      product: req.params.id,
+    });
+
+    if (!review) {
+      return res.status(404).json({ message: "Review not found" });
+    }
+
+    if (review.user.toString() !== req.user.id && req.user.role !== "admin") {
+      return res.status(403).json({ message: "Not allowed" });
+    }
+
+    await review.deleteOne();
+    await recalculateProductRating(req.params.id);
+
+    res.json({ message: "Review deleted successfully" });
+  } catch (err) {
+    console.error("❌ Delete review error:", err);
+    res.status(500).json({ message: "Error deleting review" });
   }
 });
 
