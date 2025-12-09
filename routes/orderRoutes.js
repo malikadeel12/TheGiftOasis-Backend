@@ -53,10 +53,19 @@ router.post("/create", verifyToken, async (req, res) => {
     const decodedUser = req.user;
     const userId = decodedUser?.id;
 
+    // Determine customer email - use form email, fallback to token email
+    const customerEmail = customerInfo.email?.trim() || decodedUser?.email?.trim() || null;
+    
+    console.log("📧 Email determination:", {
+      formEmail: customerInfo.email,
+      tokenEmail: decodedUser?.email,
+      finalEmail: customerEmail,
+    });
+
     const order = new Order({
       customerInfo: {
         ...customerInfo,
-        email: customerInfo.email || decodedUser?.email,
+        email: customerEmail || undefined, // Store email if available
       },
       ...(userId ? { user: userId } : {}),
       items: cleanedItems,
@@ -94,11 +103,20 @@ router.post("/create", verifyToken, async (req, res) => {
 
     // Send confirmation email to customer
     try {
-      const customerEmailResult = await sendOrderConfirmationEmail(orderDataForEmail);
-      if (customerEmailResult.success) {
-        console.log("📧 Customer confirmation email sent successfully");
+      if (!order.customerInfo.email) {
+        console.warn("⚠️ Customer email not available - skipping confirmation email");
+        console.warn("⚠️ Email sources:", {
+          formEmail: customerInfo.email,
+          tokenEmail: decodedUser?.email,
+          storedEmail: order.customerInfo.email,
+        });
       } else {
-        console.warn("⚠️ Failed to send customer confirmation email:", customerEmailResult.error);
+        const customerEmailResult = await sendOrderConfirmationEmail(orderDataForEmail);
+        if (customerEmailResult.success) {
+          console.log("📧 Customer confirmation email sent successfully to:", order.customerInfo.email);
+        } else {
+          console.warn("⚠️ Failed to send customer confirmation email:", customerEmailResult.error);
+        }
       }
     } catch (emailError) {
       // Don't fail the order creation if email fails
