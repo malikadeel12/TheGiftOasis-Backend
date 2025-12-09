@@ -88,41 +88,7 @@ router.post("/create", verifyToken, async (req, res) => {
       createdAt: order.createdAt,
     };
 
-    // Send email notification to admin
-    try {
-      const adminEmailResult = await sendOrderNotificationEmail(orderDataForEmail);
-      if (adminEmailResult.success) {
-        console.log("📧 Admin notification email sent successfully");
-      } else {
-        console.warn("⚠️ Failed to send admin notification email:", adminEmailResult.error);
-      }
-    } catch (emailError) {
-      // Don't fail the order creation if email fails
-      console.error("⚠️ Admin email notification error (order still created):", emailError);
-    }
-
-    // Send confirmation email to customer
-    try {
-      if (!order.customerInfo.email) {
-        console.warn("⚠️ Customer email not available - skipping confirmation email");
-        console.warn("⚠️ Email sources:", {
-          formEmail: customerInfo.email,
-          tokenEmail: decodedUser?.email,
-          storedEmail: order.customerInfo.email,
-        });
-      } else {
-        const customerEmailResult = await sendOrderConfirmationEmail(orderDataForEmail);
-        if (customerEmailResult.success) {
-          console.log("📧 Customer confirmation email sent successfully to:", order.customerInfo.email);
-        } else {
-          console.warn("⚠️ Failed to send customer confirmation email:", customerEmailResult.error);
-        }
-      }
-    } catch (emailError) {
-      // Don't fail the order creation if email fails
-      console.error("⚠️ Customer email notification error (order still created):", emailError);
-    }
-
+    // Send response immediately to prevent timeout
     res.status(201).json({
       message: "Order placed successfully!",
       order: {
@@ -133,6 +99,45 @@ router.post("/create", verifyToken, async (req, res) => {
         createdAt: order.createdAt,
       },
     });
+
+    // Send emails asynchronously (fire and forget) - don't block the response
+    // This ensures the frontend gets a response quickly even if emails are slow
+    (async () => {
+      // Send email notification to admin
+      try {
+        const adminEmailResult = await sendOrderNotificationEmail(orderDataForEmail);
+        if (adminEmailResult.success) {
+          console.log("📧 Admin notification email sent successfully");
+        } else {
+          console.warn("⚠️ Failed to send admin notification email:", adminEmailResult.error);
+        }
+      } catch (emailError) {
+        // Don't fail the order creation if email fails
+        console.error("⚠️ Admin email notification error (order still created):", emailError);
+      }
+
+      // Send confirmation email to customer
+      try {
+        if (!order.customerInfo.email) {
+          console.warn("⚠️ Customer email not available - skipping confirmation email");
+          console.warn("⚠️ Email sources:", {
+            formEmail: customerInfo.email,
+            tokenEmail: decodedUser?.email,
+            storedEmail: order.customerInfo.email,
+          });
+        } else {
+          const customerEmailResult = await sendOrderConfirmationEmail(orderDataForEmail);
+          if (customerEmailResult.success) {
+            console.log("📧 Customer confirmation email sent successfully to:", order.customerInfo.email);
+          } else {
+            console.warn("⚠️ Failed to send customer confirmation email:", customerEmailResult.error);
+          }
+        }
+      } catch (emailError) {
+        // Don't fail the order creation if email fails
+        console.error("⚠️ Customer email notification error (order still created):", emailError);
+      }
+    })();
   } catch (err) {
     console.error("❌ Create order error:", err);
     console.error("❌ Error details:", {
