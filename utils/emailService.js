@@ -1,33 +1,37 @@
 import nodemailer from "nodemailer";
 
 /**
- * Create reusable transporter object using Mailtrap SMTP
+ * Create reusable transporter object using Brevo (formerly Sendinblue) SMTP
  * 
- * Mailtrap Setup Instructions:
- * 1. Go to your Mailtrap inbox settings
- * 2. Copy SMTP credentials (Username and Password)
- * 3. Set environment variables in .env file:
- *    - MAILTRAP_USER=your_mailtrap_username
- *    - MAILTRAP_PASS=your_mailtrap_password
- *    - MAILTRAP_HOST=smtp.mailtrap.io (default)
- *    - MAILTRAP_PORT=2525 (default) or 587 for TLS
+ * Brevo Setup Instructions:
+ * 1. Go to https://app.brevo.com/
+ * 2. Navigate to Settings > SMTP & API
+ * 3. Copy your SMTP API Key
+ * 4. Set environment variables in .env file:
+ *    - BREVO_API_KEY=your_brevo_api_key
+ *    - BREVO_SMTP_USER=your_sender_email (optional, can use any email)
  * 
- * Note: If using Mailtrap Email Sending API, you may need different credentials.
- * For SMTP, use the credentials from your Mailtrap inbox settings.
+ * Brevo SMTP Settings:
+ * - Host: smtp-relay.brevo.com
+ * - Port: 587 (TLS) or 465 (SSL)
+ * - Username: Your sender email address
+ * - Password: Your Brevo SMTP API Key
  */
 const createTransporter = () => {
+  const brevoApiKey = process.env.BREVO_API_KEY ;
+  const brevoUser = process.env.BREVO_SMTP_USER || process.env.EMAIL_FROM || "thegiftoasis31@gmail.com";
+  
   return nodemailer.createTransport({
-    host: process.env.MAILTRAP_HOST || "smtp.mailtrap.io",
-    port: parseInt(process.env.MAILTRAP_PORT) || 2525,
+    host: "smtp-relay.brevo.com",
+    port: 587,
+    secure: false, // true for 465, false for other ports
     auth: {
-      user: process.env.MAILTRAP_USER || "b5852518c2da8805b708c105069b8daf", // Mailtrap SMTP username
-      pass: process.env.MAILTRAP_PASS || "b5852518c2da8805b708c105069b8daf", // Mailtrap SMTP password
+      user: brevoUser, // Sender email address
+      pass: brevoApiKey, // Brevo SMTP API Key
     },
-    // For port 587, enable TLS
-    // secure: false, // true for 465, false for other ports
-    // tls: {
-    //   rejectUnauthorized: false
-    // }
+    tls: {
+      rejectUnauthorized: false
+    }
   });
 };
 
