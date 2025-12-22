@@ -1,13 +1,33 @@
 import nodemailer from "nodemailer";
 
-// Create reusable transporter object using Gmail SMTP
+/**
+ * Create reusable transporter object using Mailtrap SMTP
+ * 
+ * Mailtrap Setup Instructions:
+ * 1. Go to your Mailtrap inbox settings
+ * 2. Copy SMTP credentials (Username and Password)
+ * 3. Set environment variables in .env file:
+ *    - MAILTRAP_USER=your_mailtrap_username
+ *    - MAILTRAP_PASS=your_mailtrap_password
+ *    - MAILTRAP_HOST=smtp.mailtrap.io (default)
+ *    - MAILTRAP_PORT=2525 (default) or 587 for TLS
+ * 
+ * Note: If using Mailtrap Email Sending API, you may need different credentials.
+ * For SMTP, use the credentials from your Mailtrap inbox settings.
+ */
 const createTransporter = () => {
   return nodemailer.createTransport({
-    service: "gmail",
+    host: process.env.MAILTRAP_HOST || "smtp.mailtrap.io",
+    port: parseInt(process.env.MAILTRAP_PORT) || 2525,
     auth: {
-      user: process.env.EMAIL_USER, // Your Gmail address
-      pass: process.env.EMAIL_PASSWORD, // Your Gmail App Password
+      user: process.env.MAILTRAP_USER || "b5852518c2da8805b708c105069b8daf", // Mailtrap SMTP username
+      pass: process.env.MAILTRAP_PASS || "b5852518c2da8805b708c105069b8daf", // Mailtrap SMTP password
     },
+    // For port 587, enable TLS
+    // secure: false, // true for 465, false for other ports
+    // tls: {
+    //   rejectUnauthorized: false
+    // }
   });
 };
 
@@ -107,7 +127,7 @@ export const sendOrderNotificationEmail = async (orderData) => {
     `;
 
     const mailOptions = {
-      from: `"The Gift Oasis" <${process.env.EMAIL_USER}>`,
+      from: `"The Gift Oasis" <${process.env.EMAIL_FROM || "thegiftoasis31@gmail.com"}>`,
       to: process.env.ADMIN_EMAIL || "thegiftoasis31@gmail.com", // Admin email
       subject: `🛍️ New Order Received - ${orderNumber}`,
       html: emailHTML,
@@ -269,7 +289,7 @@ export const sendOrderConfirmationEmail = async (orderData) => {
     `;
 
     const mailOptions = {
-      from: `"The Gift Oasis" <${process.env.EMAIL_USER}>`,
+      from: `"The Gift Oasis" <${process.env.EMAIL_FROM || "thegiftoasis31@gmail.com"}>`,
       to: customerInfo.email, // Customer email
       subject: `✅ Order Confirmation - ${orderNumber} | The Gift Oasis`,
       html: emailHTML,
