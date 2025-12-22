@@ -116,6 +116,10 @@ router.post("/create", verifyToken, async (req, res) => {
         console.error("⚠️ Admin email notification error (order still created):", emailError);
       }
 
+      // Add delay between emails to avoid Mailtrap rate limiting (free plan: 2 emails/second)
+      // Wait 1.5 seconds before sending the next email
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
       // Send confirmation email to customer
       try {
         if (!order.customerInfo.email) {

@@ -31,6 +31,35 @@ const createTransporter = () => {
   });
 };
 
+/**
+ * Helper function to send email with retry logic for rate limiting
+ * @param {Function} sendFunction - Function that sends the email
+ * @param {number} maxRetries - Maximum number of retries (default: 2)
+ * @param {number} baseDelay - Base delay in milliseconds (default: 2000)
+ */
+const sendEmailWithRetry = async (sendFunction, maxRetries = 2, baseDelay = 2000) => {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await sendFunction();
+    } catch (error) {
+      // Check if it's a rate limit error
+      const isRateLimitError = error.responseCode === 550 && 
+        (error.message?.includes('Too many emails') || 
+         error.response?.includes('Too many emails'));
+      
+      if (isRateLimitError && attempt < maxRetries) {
+        // Exponential backoff: wait longer with each retry
+        const delay = baseDelay * (attempt + 1);
+        console.log(`⏳ Rate limit hit, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      // If not a rate limit error or max retries reached, throw the error
+      throw error;
+    }
+  }
+};
+
 // Send order notification email to admin
 export const sendOrderNotificationEmail = async (orderData) => {
   try {
@@ -157,7 +186,11 @@ Please process this order as soon as possible.
       `.trim(),
     };
 
-    const info = await transporter.sendMail(mailOptions);
+    // Use retry logic for rate limiting
+    const info = await sendEmailWithRetry(async () => {
+      return await transporter.sendMail(mailOptions);
+    });
+    
     console.log("✅ Order notification email sent successfully:", info.messageId);
     return { success: true, messageId: info.messageId };
   } catch (error) {
@@ -331,7 +364,11 @@ If you have any questions, please contact us.
       `.trim(),
     };
 
-    const info = await transporter.sendMail(mailOptions);
+    // Use retry logic for rate limiting
+    const info = await sendEmailWithRetry(async () => {
+      return await transporter.sendMail(mailOptions);
+    });
+    
     console.log("✅ Order confirmation email sent to customer:", info.messageId);
     return { success: true, messageId: info.messageId };
   } catch (error) {
