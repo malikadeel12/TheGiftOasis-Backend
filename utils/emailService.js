@@ -53,12 +53,15 @@ export const sendOrderNotificationEmail = async (orderData) => {
   try {
     const { orderNumber, customerInfo, items, totalAmount, paymentInfo, createdAt } = orderData;
 
-    // Format order items for email
+    // Format order items for email with category
     const itemsList = items
       .map(
         (item) =>
           `<tr>
-            <td style="padding: 8px; border: 1px solid #ddd;">${item.name}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">
+              ${item.name}
+              ${item.category ? `<br><span style="font-size: 11px; color: #666;">📁 ${item.category}</span>` : ''}
+            </td>
             <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.quantity}</td>
             <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">Rs.${item.price.toFixed(2)}</td>
             <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">Rs.${(item.price * item.quantity).toFixed(2)}</td>
@@ -172,7 +175,7 @@ Payment Method: ${paymentInfo.method.toUpperCase()}
 ${paymentInfo.screenshotUrl ? `Screenshot: ${paymentInfo.screenshotUrl}` : ""}
 
 Order Items:
-${items.map((item) => `${item.name} x ${item.quantity} = Rs.${(item.price * item.quantity).toFixed(2)}`).join("\n")}
+${items.map((item) => `${item.name}${item.category ? ` [${item.category}]` : ''} x ${item.quantity} = Rs.${(item.price * item.quantity).toFixed(2)}`).join("\n")}
 
 Total Amount: Rs.${totalAmount.toFixed(2)}
 
@@ -207,12 +210,15 @@ export const sendOrderConfirmationEmail = async (orderData) => {
       return { success: false, error: "Customer email not provided" };
     }
 
-    // Format order items for email
+    // Format order items for email with category
     const itemsList = items
       .map(
         (item) =>
           `<tr>
-            <td style="padding: 8px; border: 1px solid #ddd;">${item.name}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">
+              ${item.name}
+              ${item.category ? `<br><span style="font-size: 11px; color: #666;">📁 ${item.category}</span>` : ''}
+            </td>
             <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.quantity}</td>
             <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">Rs.${item.price.toFixed(2)}</td>
             <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">Rs.${(item.price * item.quantity).toFixed(2)}</td>
@@ -349,7 +355,7 @@ Payment Method: ${paymentInfo.method.toUpperCase()}
 Please ensure your payment has been completed. Our team will verify and confirm your order shortly.
 
 Your Order Items:
-${items.map((item) => `${item.name} x ${item.quantity} = Rs.${(item.price * item.quantity).toFixed(2)}`).join("\n")}
+${items.map((item) => `${item.name}${item.category ? ` [${item.category}]` : ''} x ${item.quantity} = Rs.${(item.price * item.quantity).toFixed(2)}`).join("\n")}
 
 Total Amount: Rs.${totalAmount.toFixed(2)}
 

@@ -1,6 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import Order from "../models/Order.js";
+import Product from "../models/Product.js";
 import { verifyToken, isAdmin } from "../middleware/auth.js";
 import { sendOrderNotificationEmail, sendOrderConfirmationEmail } from "../utils/emailService.js";
 
@@ -40,15 +41,35 @@ router.post("/create", verifyToken, async (req, res) => {
     }
 
     // Clean up items - ensure productId is valid ObjectId or null
-    const cleanedItems = items.map((item) => ({
-      productId: item.productId && mongoose.Types.ObjectId.isValid(item.productId) 
-        ? item.productId 
-        : null, // Allow null if productId is invalid
-      name: item.name,
-      quantity: Number(item.quantity),
-      price: Number(item.price),
-      imageUrl: item.imageUrl || "",
-    }));
+    // Also fetch category from Product for admin insights
+    const cleanedItems = await Promise.all(
+      items.map(async (item) => {
+        let category = item.category || "";
+        
+        // If productId is valid, fetch category from Product
+        if (item.productId && mongoose.Types.ObjectId.isValid(item.productId)) {
+          try {
+            const product = await Product.findById(item.productId).select("category");
+            if (product && product.category) {
+              category = product.category;
+            }
+          } catch (err) {
+            console.warn("⚠️ Failed to fetch product category:", err.message);
+          }
+        }
+        
+        return {
+          productId: item.productId && mongoose.Types.ObjectId.isValid(item.productId) 
+            ? item.productId 
+            : null, // Allow null if productId is invalid
+          name: item.name,
+          quantity: Number(item.quantity),
+          price: Number(item.price),
+          imageUrl: item.imageUrl || "",
+          category,
+        };
+      })
+    );
 
     const decodedUser = req.user;
     const userId = decodedUser?.id;
