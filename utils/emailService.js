@@ -730,3 +730,103 @@ Action Required: Please review this application and contact the applicant at you
   }
 };
 
+
+// Send password reset email
+export const sendPasswordResetEmail = async (email, resetToken) => {
+  try {
+    const FRONTEND_URL = process.env.FRONTEND_URL || "https://thegiftoasis.store";
+    const resetLink = `${FRONTEND_URL}/reset-password/${resetToken}`;
+
+    const emailData = {
+      sender: {
+        name: "The Gift Oasis",
+        email: process.env.EMAIL_FROM || "thegiftoasis31@gmail.com"
+      },
+      to: [
+        {
+          email: email,
+          name: "User"
+        }
+      ],
+      subject: "Reset Your Password - The Gift Oasis",
+      htmlContent: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Reset Your Password</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f9f9f9; }
+            .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+            .header { background: linear-gradient(135deg, #ec4899, #be185d); color: white; padding: 30px; text-align: center; }
+            .header h1 { margin: 0; font-size: 24px; }
+            .content { padding: 40px 30px; }
+            .button { display: inline-block; background: linear-gradient(135deg, #ec4899, #be185d); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }
+            .button:hover { background: linear-gradient(135deg, #db2777, #9d174d); }
+            .footer { background-color: #f3f4f6; padding: 20px; text-align: center; font-size: 12px; color: #6b7280; }
+            .warning { background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; margin: 20px 0; color: #92400e; }
+            .link-box { background-color: #f3f4f6; padding: 12px; border-radius: 6px; word-break: break-all; font-size: 14px; margin: 10px 0; }
+          </style>
+        </head>
+        <body>
+          <div className="container">
+            <div className="header">
+              <h1>🔐 Password Reset Request</h1>
+            </div>
+            <div className="content">
+              <p>Hello,</p>
+              <p>We received a request to reset your password for your The Gift Oasis account. Click the button below to create a new password:</p>
+              
+              <center>
+                <a href="${resetLink}" className="button">Reset My Password</a>
+              </center>
+              
+              <p style="font-size: 14px; color: #6b7280;">If the button doesn't work, copy and paste this link into your browser:</p>
+              <div className="link-box">${resetLink}</div>
+              
+              <div className="warning">
+                <strong>⚠️ Important:</strong> This link will expire in 1 hour for security reasons.
+              </div>
+              
+              <p>If you didn't request a password reset, please ignore this email or contact us if you're concerned about your account security.</p>
+              
+              <p>Best regards,<br><strong>The Gift Oasis Team</strong></p>
+            </div>
+            <div className="footer">
+              <p>© ${new Date().getFullYear()} The Gift Oasis. All rights reserved.</p>
+              <p>This is an automated email, please do not reply.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      textContent: `
+Password Reset Request - The Gift Oasis
+
+Hello,
+
+We received a request to reset your password for your The Gift Oasis account. 
+
+Click the link below to create a new password:
+${resetLink}
+
+⚠️ Important: This link will expire in 1 hour for security reasons.
+
+If you didn't request a password reset, please ignore this email or contact us if you're concerned about your account security.
+
+Best regards,
+The Gift Oasis Team
+
+© ${new Date().getFullYear()} The Gift Oasis. All rights reserved.
+      `.trim()
+    };
+
+    const result = await sendEmailViaBrevo(emailData);
+    return result;
+    
+  } catch (error) {
+    console.error("Error sending password reset email:", error);
+    return { success: false, error: error.message };
+  }
+};
